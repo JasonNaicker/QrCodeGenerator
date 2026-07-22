@@ -1,6 +1,6 @@
 from enum import Enum
 
-class ErrorCorrection(Enum):
+class ErrorCorrectionMode(Enum):
     LOW = "L"
     MEDIUM = "M"
     QUARTILE = "Q"
