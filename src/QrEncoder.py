@@ -12,16 +12,21 @@ class QrEncoder():
         self.error_correction = error_correction
         self.version = version
 
-    def _encode_data() -> BitStream:
+        if not isinstance(self.data, str):
+            raise TypeError("Input data is not a string")
+
+    def _encode_data(self) -> BitStream:
+        encoded : BitStream = [0] * len(self.data)
+        for c in self.data:
+            encoded.append[format(c, "b")]
+
+    def _error_correction(self) -> BitStream:
         pass
 
-    def _error_correction() -> BitStream:
+    def _place_modules(self) -> QrMatrix:
         pass
 
-    def _place_modules() -> QrMatrix:
-        pass
-
-    def _apply_mask() -> QrMatrix:
+    def _apply_mask(self) -> QrMatrix:
         pass
     
     def encode(self) -> QrMatrix:
