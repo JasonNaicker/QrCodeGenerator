@@ -12,7 +12,6 @@ class QrMatrixBuilder:
         self.size = 21 + (version - 1) * 4
 
     def create_empty(self) -> QrMatrix:
-
         return [[0] * self.size for _ in range(self.size)]
 
     def place_modules(self,data: BitStream) -> QrMatrix:

@@ -1,7 +1,7 @@
 from enum import Enum
 
 class EncodingMode(Enum):
-    NUMERIC = "N"
-    ALPHANUMERIC = "A"
-    BINARY = "B"
-    KANJI = "K"
+    NUMERIC = 0b0001
+    ALPHANUMERIC = 0b0010
+    BINARY = 0b0100
+    KANJI = 0b1000
