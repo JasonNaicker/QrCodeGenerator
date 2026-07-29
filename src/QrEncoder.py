@@ -1,5 +1,5 @@
 from typing import TypeAlias
-
+from dataclasses import dataclass
 from src.Enums.ErrorCorrection import ErrorCorrectionMode
 from src.Enums.EncodingMode import EncodingMode
 from src.ReedSolomon import ReedSolomon
@@ -8,6 +8,10 @@ from src.Matrix import QrMatrix, QrMatrixBuilder
 QrInput: TypeAlias = str
 BitStream: TypeAlias = list[int]
 
+@dataclass(slots=True)
+class EncodedData():
+    bits: BitStream
+    character_count : int
 class QrEncoder:
 
     __slots__ = (
@@ -38,22 +42,7 @@ class QrEncoder:
 
         if self.version < 1 or self.version > 40:
             raise ValueError("Version must be between 1-40")
-
-    def _get_character_count(self) -> int:
-        if self.encoding_mode == EncodingMode.BINARY:
-            return len(self.input_data.encode("utf-8"))
-
-        elif self.encoding_mode == EncodingMode.NUMERIC:
-            return len(self.input_data)
-
-        elif self.encoding_mode == EncodingMode.ALPHANUMERIC:
-            return len(self.input_data)
-
-        elif self.encoding_mode == EncodingMode.KANJI:
-            return len(self.input_data)
-
-        raise ValueError("Unsupported encoding mode")
-
+        
     def _get_character_count_bits(self) -> int:
         if self.version <= 9:
             table = {
@@ -78,26 +67,24 @@ class QrEncoder:
             }
         return table[self.encoding_mode]
 
-    def _encode_byte_data(self) -> BitStream:
-        """
-        Convert UTF-8 bytes into bits
-        """
+    def _encode_byte_data(self) -> EncodedData:
+        encoded_bytes = self.input_data.encode("utf-8")
 
-        encoded: BitStream = []
-        for byte in self.input_data.encode("utf-8"):
-            encoded.extend(int(bit) for bit in f"{byte:08b}")
-        return encoded
+        bits: BitStream = []
+        for byte in encoded_bytes:
+            bits.extend(int(bit) for bit in f"{byte:08b}")
+        return EncodedData(bits=bits, character_count=len(encoded_bytes))
 
-    def _encode_numeric_data(self) -> BitStream:
+    def _encode_numeric_data(self) -> EncodedData:
         pass
 
-    def _encode_alphanumeric_data(self) -> BitStream:
+    def _encode_alphanumeric_data(self) -> EncodedData:
         pass
     
-    def _encode_kanji_data(self) -> BitStream:
+    def _encode_kanji_data(self) -> EncodedData:
         pass
 
-    def _encode_data(self) -> BitStream:
+    def _encode_data(self) -> EncodedData:
         if self.encoding_mode == EncodingMode.BINARY:
                 return self._encode_byte_data()
         elif self.encoding_mode == EncodingMode.NUMERIC:
@@ -109,7 +96,7 @@ class QrEncoder:
 
         raise ValueError("Unsupported Encoding")
 
-    def _add_metadata(self, data: BitStream) -> BitStream:
+    def _add_metadata(self, encoded: EncodedData) -> BitStream:
         """
         Add:
         - mode indicator
@@ -119,16 +106,16 @@ class QrEncoder:
         # TODO:
         # Add encoding mode bits
         # Add character count bits
-        encoded: BitStream = []
+        result: BitStream = []
 
-        count = self._get_character_count_bits()
         count_bits = self._get_character_count_bits()
 
-        encoded.extend(int(b) for b in f"{self.encoding_mode.value:04b}")
-        encoded.extend(int(b) for b in f"{count:0{count_bits}b}")
-        encoded.extend(data)
+        result.extend(int(b) for b in f"{self.encoding_mode.value:04b}") #Encoding Mode Bits
+        result.extend(int(b) for b in f"{encoded.character_count:0{count_bits}b}") #Character count Bits
+        result.extend(encoded.bits) #Data Bits
+        result.extend(int(b) for b in f"{0000:04b}") #Terminator Bits
 
-        return encoded
+        return result
 
     def _pad_data(self, data: BitStream) -> BitStream:
         """
@@ -149,8 +136,3 @@ class QrEncoder:
         bits = self.reed_solomon.generate(bits)
         matrix = self.matrix_builder.place_modules(bits)
         return matrix
-
-    def generateQrCode(self) -> None:
-        _matrix = self.encode()
-
-        #TODO, display/render qr code

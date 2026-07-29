@@ -5,3 +5,4 @@ class EncodingMode(Enum):
     ALPHANUMERIC = 0b0010
     BINARY = 0b0100
     KANJI = 0b1000
+    ECI = 0b0111
