@@ -113,7 +113,7 @@ class QrEncoder:
         result.extend(int(b) for b in f"{self.encoding_mode.value:04b}") #Encoding Mode Bits
         result.extend(int(b) for b in f"{encoded.character_count:0{count_bits}b}") #Character count Bits
         result.extend(encoded.bits) #Data Bits
-        result.extend(int(b) for b in f"{0000:04b}") #Terminator Bits
+        #result.extend(int(b) for b in f"{0000:04b}") #Terminator Bits
 
         return result
 
