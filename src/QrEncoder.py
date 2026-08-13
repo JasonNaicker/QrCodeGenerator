@@ -122,11 +122,36 @@ class QrEncoder:
 
         return EncodedData(
             bits=bits,
-            character_count=len(self.input_data)
-        )
+            character_count=len(self.input_data))
 
+    def _alphanumeric_value(c: str) -> int:
+        ALPHANUMERIC_CHARS : str = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:"
+        value = ALPHANUMERIC_CHARS.find(c)
+
+        if value == -1:
+            raise ValueError(f"Invalid alphanumeric character: {c!r}")
+
+        return value
+            
     def _encode_alphanumeric_data(self) -> EncodedData:
-        pass
+
+            bits: BitStream = []
+        
+            for i in range(0, len(self.input_data), 2):
+                group = self.input_data[i : i + 2]
+
+                if len(group) == 2:
+                    value = int((self._alphanumeric_value(group[0]) * 45) + self._alphanumeric_value(group[1]))
+                    bit_count = 11
+                else:
+                    value = int((self._alphanumeric_value(group[0])))
+                    bit_count = 6
+
+                bits.extend(int(b) for b in f"{value:0{bit_count}b}")
+
+            return EncodedData(
+                bits=bits,
+                character_count=len(self.input_data))
     
     def _encode_kanji_data(self) -> EncodedData:
         encoded_bytes = self.input_data.encode("shift-jis")
@@ -149,20 +174,11 @@ class QrEncoder:
         raise ValueError("Unsupported Encoding")
 
     def _add_metadata(self, encoded: EncodedData) -> BitStream:
-        """
-        Add:
-        - mode indicator
-        - character count
-        """
-
-        # TODO:
-        # Add encoding mode bits
-        # Add character count bits
         result: BitStream = []
 
         result.extend(int(b) for b in f"{self.encoding_mode.value:04b}") #Encoding Mode Bits
         result.extend(int(b) for b in f"{encoded.character_count:0{self.character_count_bits}b}") #Character count Bits
-        result.extend(self.encoded_data.bits) #Data Bits
+        result.extend(encoded.bits) #Data Bits
 
         return result
 
@@ -194,8 +210,8 @@ class QrEncoder:
         return data
 
     def encode(self) -> QrMatrix:
-        bits = self._encode_data()
-        bits = self._add_metadata(bits)
+        encoded = self._encode_data()
+        bits = self._add_metadata(encoded)
         bits = self._add_terminator(bits)
         bits = self._pad_data(bits)
         bits = self._add_pad_codewords(bits)
