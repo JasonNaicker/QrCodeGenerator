@@ -105,7 +105,25 @@ class QrEncoder:
         return EncodedData(bits=bits, character_count=len(encoded_bytes))
 
     def _encode_numeric_data(self) -> EncodedData:
-        pass
+        bits: BitStream = []
+
+        for i in range(0, len(self.input_data), 3):
+            group = self.input_data[i:i + 3]
+
+            if len(group) == 3:
+                bit_count = 10
+            elif len(group) == 2:
+                bit_count = 7
+            else:
+                bit_count = 4
+
+            value = int(group)
+            bits.extend(int(b) for b in f"{value:0{bit_count}b}")
+
+        return EncodedData(
+            bits=bits,
+            character_count=len(self.input_data)
+        )
 
     def _encode_alphanumeric_data(self) -> EncodedData:
         pass
