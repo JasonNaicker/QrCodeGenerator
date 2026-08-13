@@ -21,40 +21,45 @@ class QrEncoder:
         "error_correction_mode",
         "version",
         "reed_solomon",
-        "matrix_builder")
+        "matrix_builder", 
+        "data_codeword_size",
+        "character_count_bits",
+        "encoded_data")
 
     def __init__(
         self,
         input_data: QrInput,
         encoding_mode: EncodingMode = EncodingMode.BINARY,
         error_correction_mode: ErrorCorrectionMode = ErrorCorrectionMode.HIGH,
-        version: int = 1) -> None:
+        version: int | None = None) -> None:
 
+        if not isinstance(input_data, str):
+            raise TypeError("Input data is not a string")
+
+        if version is not None and not 1 <= version <= 40:
+            raise ValueError("Version must be between 1-40")
+        
         self.input_data = input_data
         self.encoding_mode = encoding_mode
         self.error_correction_mode = error_correction_mode
-        self.version = version
+        self.encoded_data : EncodedData = self._encode_data()
+        self.version = (self._calculate_version() if version is None else version)
 
-        self.reed_solomon = ReedSolomon(error_correction_mode)
-        self.matrix_builder = QrMatrixBuilder(version)
-        self.data_codward_size : int = self._get_data_codewards() * 8
-        self.character_count_bits  : int = self._get_character_count_bits()
+        self.data_codeword_size : int = self._get_data_codewords() * 8
+        self.character_count_bits  : int = self._get_character_count_bits(self.version)
 
-        if not isinstance(self.input_data, str):
-            raise TypeError("Input data is not a string")
-
-        if self.version < 1 or self.version > 40:
-            raise ValueError("Version must be between 1-40")
+        self.reed_solomon = ReedSolomon(self.error_correction_mode)
+        self.matrix_builder = QrMatrixBuilder(self.version)
         
-    def _get_character_count_bits(self) -> int:
-        if self.version <= 9:
+    def _get_character_count_bits(self, version : int) -> int:
+        if version <= 9:
             table = {
                 EncodingMode.NUMERIC: 10,
                 EncodingMode.ALPHANUMERIC: 9,
                 EncodingMode.BINARY: 8,
                 EncodingMode.KANJI: 8,
             }
-        elif self.version <= 26:
+        elif version <= 26:
             table = {
                 EncodingMode.NUMERIC: 12,
                 EncodingMode.ALPHANUMERIC: 11,
@@ -70,13 +75,27 @@ class QrEncoder:
             }
         return table[self.encoding_mode]
 
-    def _get_version_info(self) -> VersionInfo:
-        return QR_VERSION_INFO[self.version][self.error_correction_mode]
+    def _get_version_info(self, version : int) -> VersionInfo:
+        return QR_VERSION_INFO[version][self.error_correction_mode]
 
-    def _get_data_codewards(self) -> int:
-        versionInfo : VersionInfo = self._get_version_info()
-        return versionInfo.data_codewords
+    def _get_data_codewords(self) -> int:
+        version_info : VersionInfo = self._get_version_info(self.version)
+        return version_info.data_codewords
 
+    def _calculate_version(self) -> int:
+
+        for version in range(1, 41):
+            character_count_bits = self._get_character_count_bits(version)
+
+            required_bits = (4 + character_count_bits + len(self.encoded_data.bits))
+
+            capacity_bits = (self._get_version_info(version).data_codewords * 8)
+
+            if required_bits <= capacity_bits:
+                return version
+
+        raise ValueError("Input data is too big for QR Code")
+    
     def _encode_byte_data(self) -> EncodedData:
         encoded_bytes = self.input_data.encode("utf-8")
 
@@ -125,35 +144,34 @@ class QrEncoder:
 
         result.extend(int(b) for b in f"{self.encoding_mode.value:04b}") #Encoding Mode Bits
         result.extend(int(b) for b in f"{encoded.character_count:0{self.character_count_bits}b}") #Character count Bits
-        result.extend(encoded.bits) #Data Bits
+        result.extend(self.encoded_data.bits) #Data Bits
 
         return result
 
     def _add_terminator(self, data: BitStream) -> BitStream:
-        for i in range(max((len(data) - self.data_codward_size), 4)):
-            data.extend(int(0)) #Terminator Bits
+        remaining = self.data_codeword_size - len(data)
+        terminator_size = min(remaining, 4)
+
+        data.extend([0] * terminator_size)
+
+        return data
 
     def _pad_data(self, data: BitStream) -> BitStream:
-        remainder = len(data) % 8
+        remainder : int = len(data) % 8
 
         if remainder:
             data.extend([0] * (8 - remainder))
 
         return data
 
-    def _add_mask(self, data: BitStream) -> BitStream:
-        current_size : int = len(data)
-        remaining_codeward_space : int = (self.data_codward_size - current_size) // 8
+    def _add_pad_codewords(self, data: BitStream) -> BitStream:
+        remaining : int = self.data_codeword_size - len(data)
 
-        first_mask = format(236, '08b')
-        second_mask = format(17, '08b')
+        pad_codwards = (0xEC, 0x11)
 
-        for i in range(remaining_codeward_space):
-            match (i % 2):
-                case 0:
-                    data.extend(int(b) for b in first_mask)
-                case 1:
-                    data.extend(int(b) for b in second_mask)
+        for i in range(0, remaining, 8):
+            value = pad_codwards[(i // 8) % 2]
+            data.extend(int(b) for b in f"{value:08b}")
 
         return data
 
@@ -162,7 +180,9 @@ class QrEncoder:
         bits = self._add_metadata(bits)
         bits = self._add_terminator(bits)
         bits = self._pad_data(bits)
-        bits = self._add_mask(bits)
+        bits = self._add_pad_codewords(bits)
+        assert len(bits) == self.data_codeword_size
         bits = self.reed_solomon.generate(bits)
+        print(bits)
         matrix = self.matrix_builder.place_modules(bits)
         return matrix
