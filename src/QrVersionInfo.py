@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from src.Enums.ErrorCorrection import ErrorCorrectionMode
 
-
 @dataclass(frozen=True, slots=True)
 class VersionInfo:
     data_codewords: int

@@ -4,7 +4,6 @@ QrMatrix: TypeAlias = list[list[int]]
 BitStream: TypeAlias = list[int]
 
 class QrMatrixBuilder:
-
     __slots__ = ("version","size")
 
     def __init__(self, version: int) -> None:

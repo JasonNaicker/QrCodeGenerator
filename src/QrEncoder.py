@@ -4,6 +4,7 @@ from src.Enums.ErrorCorrection import ErrorCorrectionMode
 from src.Enums.EncodingMode import EncodingMode
 from src.ReedSolomon import ReedSolomon
 from src.Matrix import QrMatrix, QrMatrixBuilder
+from src.QrVersionInfo import QR_VERSION_INFO, VersionInfo
 
 QrInput: TypeAlias = str
 BitStream: TypeAlias = list[int]
@@ -36,6 +37,8 @@ class QrEncoder:
 
         self.reed_solomon = ReedSolomon(error_correction_mode)
         self.matrix_builder = QrMatrixBuilder(version)
+        self.data_codward_size : int = self._get_data_codewards() * 8
+        self.character_count_bits  : int = self._get_character_count_bits()
 
         if not isinstance(self.input_data, str):
             raise TypeError("Input data is not a string")
@@ -67,6 +70,13 @@ class QrEncoder:
             }
         return table[self.encoding_mode]
 
+    def _get_version_info(self) -> VersionInfo:
+        return QR_VERSION_INFO[self.version][self.error_correction_mode]
+
+    def _get_data_codewards(self) -> int:
+        versionInfo : VersionInfo = self._get_version_info()
+        return versionInfo.data_codewords
+
     def _encode_byte_data(self) -> EncodedData:
         encoded_bytes = self.input_data.encode("utf-8")
 
@@ -82,7 +92,12 @@ class QrEncoder:
         pass
     
     def _encode_kanji_data(self) -> EncodedData:
-        pass
+        encoded_bytes = self.input_data.encode("shift-jis")
+    
+        bits: BitStream = []
+        for byte in encoded_bytes:
+            bits.extend(int(bit) for bit in f"{byte:08b}")
+        return EncodedData(bits=bits, character_count=len(encoded_bytes))
 
     def _encode_data(self) -> EncodedData:
         if self.encoding_mode == EncodingMode.BINARY:
@@ -108,20 +123,17 @@ class QrEncoder:
         # Add character count bits
         result: BitStream = []
 
-        count_bits = self._get_character_count_bits()
-
         result.extend(int(b) for b in f"{self.encoding_mode.value:04b}") #Encoding Mode Bits
-        result.extend(int(b) for b in f"{encoded.character_count:0{count_bits}b}") #Character count Bits
+        result.extend(int(b) for b in f"{encoded.character_count:0{self.character_count_bits}b}") #Character count Bits
         result.extend(encoded.bits) #Data Bits
-        #result.extend(int(b) for b in f"{0000:04b}") #Terminator Bits
 
         return result
 
-    def _pad_data(self, data: BitStream) -> BitStream:
-        """
-        Align bits to byte boundary
-        """
+    def _add_terminator(self, data: BitStream) -> BitStream:
+        for i in range(max((len(data) - self.data_codward_size), 4)):
+            data.extend(int(0)) #Terminator Bits
 
+    def _pad_data(self, data: BitStream) -> BitStream:
         remainder = len(data) % 8
 
         if remainder:
@@ -129,10 +141,28 @@ class QrEncoder:
 
         return data
 
+    def _add_mask(self, data: BitStream) -> BitStream:
+        current_size : int = len(data)
+        remaining_codeward_space : int = (self.data_codward_size - current_size) // 8
+
+        first_mask = format(236, '08b')
+        second_mask = format(17, '08b')
+
+        for i in range(remaining_codeward_space):
+            match (i % 2):
+                case 0:
+                    data.extend(int(b) for b in first_mask)
+                case 1:
+                    data.extend(int(b) for b in second_mask)
+
+        return data
+
     def encode(self) -> QrMatrix:
         bits = self._encode_data()
         bits = self._add_metadata(bits)
+        bits = self._add_terminator(bits)
         bits = self._pad_data(bits)
+        bits = self._add_mask(bits)
         bits = self.reed_solomon.generate(bits)
         matrix = self.matrix_builder.place_modules(bits)
         return matrix
