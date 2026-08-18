@@ -40,7 +40,7 @@ class QrEncoder:
             raise ValueError("Version must be between 1-40")
         
         self.input_data = input_data
-        self.error_correction_mode = self.error_correction_mode
+        self.error_correction_mode = error_correction_mode
         self.encoding_mode = (self._detect_encoding_mode() if encoding_mode is None else encoding_mode)
         self.encoded_data : EncodedData = self._encode_data()
         self.version = (self._calculate_version() if version is None else version)
@@ -258,7 +258,7 @@ class QrEncoder:
         return data
 
     def encode(self) -> QrMatrix:
-        bits = self._add_metadata(self._encoded_data)
+        bits = self._add_metadata(self.encoded_data)
         bits = self._add_terminator(bits)
         bits = self._pad_data(bits)
         bits = self._add_pad_codewords(bits)
