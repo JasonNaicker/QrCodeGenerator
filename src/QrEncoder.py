@@ -29,7 +29,7 @@ class QrEncoder:
     def __init__(
         self,
         input_data: QrInput,
-        encoding_mode: EncodingMode = EncodingMode.BINARY,
+        encoding_mode: EncodingMode | None = None,
         error_correction_mode: ErrorCorrectionMode = ErrorCorrectionMode.HIGH,
         version: int | None = None) -> None:
 
@@ -41,7 +41,7 @@ class QrEncoder:
         
         self.input_data = input_data
         self.encoding_mode = encoding_mode
-        self.error_correction_mode = error_correction_mode
+        self.encoding_mode = (self._detect_encoding_mode() if encoding_mode is None else encoding_mode)
         self.encoded_data : EncodedData = self._encode_data()
         self.version = (self._calculate_version() if version is None else version)
 
@@ -83,7 +83,6 @@ class QrEncoder:
         return version_info.data_codewords
 
     def _calculate_version(self) -> int:
-
         for version in range(1, 41):
             character_count_bits = self._get_character_count_bits(version)
 
@@ -153,7 +152,24 @@ class QrEncoder:
             return EncodedData(
                 bits=bits,
                 character_count=len(self.input_data))
-    
+
+    def _can_encode_as_kanji(self) -> bool:
+        for c in self.input_data:
+            try:
+                encoded = c.encode("shift-jis")
+            except UnicodeEncodeError:
+                return False
+
+            if len(encoded) != 2:
+                return False
+
+            value = (encoded[0] << 8) | encoded[1]
+
+            if not (0x8140 <= value <= 0x9FFC or 0xE040 <= value <= 0xEBBF):
+                return False
+
+        return True
+
     def _encode_kanji_data(self) -> EncodedData:
         bits: BitStream = []
         for c in self.input_data:
@@ -177,6 +193,18 @@ class QrEncoder:
             bits.extend(int(b) for b in f"{encoded_value:013b}")
 
         return EncodedData(bits=bits, character_count=len(self.input_data))
+    
+    def _detect_encoding_mode(self) -> EncodingMode:
+        if self.input_data.isdigit():
+            return EncodingMode.NUMERIC
+
+        if all(self._alphanumeric_value(c) for c in self.input_data):
+            return EncodingMode.ALPHANUMERIC
+
+        if self._can_encode_as_kanji():
+            return EncodingMode.KANJI
+
+        return EncodingMode.BINARY
 
     def _encode_data(self) -> EncodedData:
         if self.encoding_mode == EncodingMode.BINARY:
