@@ -124,6 +124,7 @@ class QrEncoder:
             bits=bits,
             character_count=len(self.input_data))
 
+    @staticmethod
     def _alphanumeric_value(c: str) -> int:
         ALPHANUMERIC_CHARS : str = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:"
         value = ALPHANUMERIC_CHARS.find(c)
@@ -154,12 +155,28 @@ class QrEncoder:
                 character_count=len(self.input_data))
     
     def _encode_kanji_data(self) -> EncodedData:
-        encoded_bytes = self.input_data.encode("shift-jis")
-    
         bits: BitStream = []
-        for byte in encoded_bytes:
-            bits.extend(int(bit) for bit in f"{byte:08b}")
-        return EncodedData(bits=bits, character_count=len(encoded_bytes))
+        for c in self.input_data:
+            encoded = c.encode("shift-jis") 
+
+            if len(encoded) != 2: 
+                raise ValueError(f"Character {c!r} cannot be encoded using QR Kanji mode")
+            
+            value = (encoded[0] << 8) | encoded[1]
+            if 0x8140 <= value <= 0x9FFC:
+                value -= 0x8140
+            elif 0xE040 <= value <= 0xEBBF:
+                value -= 0xC140
+            else:
+                raise ValueError(f"Character {c!r} cannot encode data using kanji mode")
+
+            high = value >> 8
+            low = value & 0xFF
+
+            encoded_value = (high * 0xC0) + low
+            bits.extend(int(b) for b in f"{encoded_value:013b}")
+
+        return EncodedData(bits=bits, character_count=len(self.input_data))
 
     def _encode_data(self) -> EncodedData:
         if self.encoding_mode == EncodingMode.BINARY:
@@ -210,8 +227,7 @@ class QrEncoder:
         return data
 
     def encode(self) -> QrMatrix:
-        encoded = self._encode_data()
-        bits = self._add_metadata(encoded)
+        bits = self._add_metadata(self._encode_data)
         bits = self._add_terminator(bits)
         bits = self._pad_data(bits)
         bits = self._add_pad_codewords(bits)
